@@ -1,0 +1,60 @@
+﻿## Build results
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+
+## User-specific files
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.csproj.user
+*.rsuser
+
+## Visual Studio
+.vs/
+*.VC.db
+*.VC.VC.opendb
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## Mono / Xamarin
+*.pidb
+*.userprefs
+*.svd
+*.pdb
+*.mdb
+
+## VS Code
+.vscode/
+
+## Backup and generated files
+*.bak
+*.tmp
+*.temp
+*.old
+
+## .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+Generated\ Files/
+
+## NuGet
+*.nupkg
+*.snupkg
+*.nuspec
+*.psmdcp
+*.nuproj
+*.nuget.props
+*.nuget.targets
+packages/
+# except build/ subfolders
+!**/packages/build/
+!**/packages/repositories.config
+
+## Az
