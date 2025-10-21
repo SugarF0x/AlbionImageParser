@@ -5,6 +5,23 @@ namespace AlbionImageParser;
 
 public class RegionDetection
 {
+    public static void TemplateMatch(string sampleSrc, string templateSrc, string outPath)
+    {
+        using var rawSample = Cv2.ImRead(sampleSrc, ImreadModes.Color);
+        var scale = 1920.0 / rawSample.Width;
+
+        using var sample = new Mat();
+        Cv2.Resize(rawSample, sample, new Size(rawSample.Width * scale, rawSample.Height * scale));
+        using var template = Cv2.ImRead(templateSrc, ImreadModes.Color);
+        using var result = new Mat();
+
+        Cv2.MatchTemplate(sample, template, result, TemplateMatchModes.CCoeffNormed);
+        Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out Point maxLoc);
+        
+        Cv2.Rectangle(sample, maxLoc, new Point(maxLoc.X + template.Width, maxLoc.Y + template.Height), Scalar.White);
+        Cv2.ImWrite(outPath, sample);
+    }
+    
     public static void SiftMatches(Mat input, Mat template, string outPath)
     {
         var scene = new Mat();

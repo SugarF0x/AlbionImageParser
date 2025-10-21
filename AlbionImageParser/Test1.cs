@@ -34,6 +34,25 @@ public sealed class Test1
         
         // RegionDetection.SiftMany(Cv2.ImRead(images[0], ImreadModes.Grayscale), Cv2.ImRead(iconPath, ImreadModes.Grayscale));
     }
+
+    [TestMethod]
+    public void TemplateMatch()
+    {
+        var outputPath = Path.GetFullPath("../../../../.output");
+        
+        var assetsPath = Path.Combine(Directory.GetCurrentDirectory(), "Assets");
+        var iconPath = Path.GetFullPath(Path.Combine(assetsPath, @"portal-pass-icon-fhd.png"));
+        var imagesPath = Path.GetFullPath(Path.Combine(assetsPath, @"samples"));
+        var images = Directory.GetFiles(imagesPath);
+        
+        for (var i = 0; i < images.Length; i++)
+        {
+            var image = images[i];
+            var newPath = Path.Combine(outputPath, Path.GetFileName(image));
+            File.Delete(newPath);
+            RegionDetection.TemplateMatch(image, iconPath, newPath);
+        }
+    }
     
     [TestMethod]
     public void TestMethod1()
