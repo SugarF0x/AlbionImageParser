@@ -1,8 +1,8 @@
 ﻿using System.Text.RegularExpressions;
 using OpenCvSharp;
-using OpenCvSharp.Extensions;
 using Tesseract;
 using Rect = OpenCvSharp.Rect;
+using Size = OpenCvSharp.Size;
 
 namespace AlbionImageParser;
 
@@ -15,12 +15,19 @@ public static partial class RegionDetection
         using (sample)
         using (template)
         {
-            var regions = TemplateMatch(sample, template);
-            return new SampleRegionData(
-                ExtractText(sample, regions.Source),
-                ExtractText(sample, regions.Target),
-                ExtractTimeout(sample, regions.Timeout)
-            );            
+            var (source, target, timeout) = TemplateMatch(sample, template);
+            using (source)
+            using (target)
+            using (timeout)
+            {
+                if (IsTextRed(timeout)) throw new InvalidImage("Portal timeout is under 1 hour");
+                
+                return new SampleRegionData(
+                    ExtractText(source),
+                    ExtractText(target),
+                    ExtractTimeout(timeout)
+                );            
+            }
         }
     }
 
@@ -35,9 +42,8 @@ public static partial class RegionDetection
 
         return (sample, template);
     }
-
-    private readonly record struct MatchedSampleRegions(Rect Source, Rect Target, Rect Timeout);
-    private static MatchedSampleRegions TemplateMatch(Mat sample, Mat template)
+    
+    private static (Mat Source, Mat Target, Mat Timeout) TemplateMatch(Mat sample, Mat template)
     {
         using var result = new Mat();
 
@@ -45,36 +51,33 @@ public static partial class RegionDetection
         Cv2.MinMaxLoc(result, out _, out var maxVal, out _, out var maxLoc);
 
         if (maxVal < .9) throw new InvalidImage("Could not match template image - portal frame missing or obstructed");
-        return new MatchedSampleRegions(
-            new Rect(350, 40, 310, 37),
-            new Rect(maxLoc.X - 208, maxLoc.Y - 35, 243, 27),
-            new Rect(maxLoc.X + 3, maxLoc.Y + 24, 80, 20)
+        return (
+            CropMat(sample, new Rect(350, 40, 310, 37)),
+            CropMat(sample, new Rect(maxLoc.X - 208, maxLoc.Y - 35, 243, 27)),
+            CropMat(sample, new Rect(maxLoc.X + 3, maxLoc.Y + 24, 80, 20))
         );
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("", "CA1416", Justification = "Not accessible on non windows machines anyway")]
-    private static (string text, float confidence) OcrRead(Mat sample, Rect rect)
+    private static (string text, float confidence) OcrRead(Mat sample)
     {
-        using var crop = CropMat(sample, rect);
-        
         var tessDataPath = Path.Combine(Directory.GetCurrentDirectory(), "Assets", "tessData");
         using var engine = new TesseractEngine(tessDataPath, "eng", EngineMode.Default);
         
-        using var pix = PixConverter.ToPix(crop.ToBitmap());
+        using var pix = Pix.LoadFromMemory(sample.ToBytes());
         using var page = engine.Process(pix, PageSegMode.SingleLine);
         return (page.GetText().Trim(), page.GetMeanConfidence());
     }
 
-    private static string ExtractText(Mat sample, Rect rect)
+    private static string ExtractText(Mat sample)
     {
-        var (text, confidence) = OcrRead(sample, rect);
+        var (text, confidence) = OcrRead(sample);
         Console.WriteLine($"[{text}] Confidence: {confidence}");
         return text;
     }
 
-    private static string ExtractTimeout(Mat sample, Rect rect)
+    private static string ExtractTimeout(Mat sample)
     {
-        var (text, confidence) = OcrRead(sample, rect);
+        var (text, confidence) = OcrRead(sample);
         var matches = TimeoutSplitRegex().Matches(text);
 
         var result = "";
@@ -92,6 +95,38 @@ public static partial class RegionDetection
     } 
     
     private static Mat CropMat(Mat source, Rect rect) => new (source, rect);
+    
+    private static bool IsTextRed(Mat image, double redRatioThreshold = 0.1)
+    {
+        // Convert BGR to HSV (better for color detection)
+        using var hsv = new Mat();
+        Cv2.CvtColor(image, hsv, ColorConversionCodes.BGR2HSV);
+
+        // Define two red hue ranges (red wraps around 0° and 180° in HSV)
+        var lowerRed1 = new Scalar(0, 100, 100);
+        var upperRed1 = new Scalar(10, 255, 255);
+
+        var lowerRed2 = new Scalar(160, 100, 100);
+        var upperRed2 = new Scalar(180, 255, 255);
+
+        // Threshold for red regions
+        using var mask1 = new Mat();
+        using var mask2 = new Mat();
+        Cv2.InRange(hsv, lowerRed1, upperRed1, mask1);
+        Cv2.InRange(hsv, lowerRed2, upperRed2, mask2);
+
+        // Combine both masks
+        using var redMask = new Mat();
+        Cv2.BitwiseOr(mask1, mask2, redMask);
+
+        // Calculate ratio of red pixels to total pixels
+        double redPixels = Cv2.CountNonZero(redMask);
+        double totalPixels = image.Rows * image.Cols;
+        var ratio = redPixels / totalPixels;
+
+        Console.WriteLine($"Red ratio: {ratio}");
+        return ratio > redRatioThreshold;
+    }
     
     [GeneratedRegex(@"(\d{1,2}\D+)")]
     private static partial Regex TimeoutSplitRegex();
