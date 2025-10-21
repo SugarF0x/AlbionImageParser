@@ -5,8 +5,12 @@ namespace AlbionImageParser;
 
 public class RegionDetection
 {
-    public static void SiftMatches(Mat scene, Mat template, string outPath)
+    public static void SiftMatches(Mat input, Mat template, string outPath)
     {
+        var scene = new Mat();
+        var scale = 1920.0 / input.Height;
+        Cv2.Resize(input, scene, new Size(input.Width * scale, input.Height * scale));
+        
         if (scene.Empty() || template.Empty())
         {
             Console.WriteLine("Could not load images.");
@@ -71,12 +75,8 @@ public class RegionDetection
                     var pt2 = sceneCorners[(i + 1) % 4];
                     Cv2.Line(scene, (int)pt1.X, (int)pt1.Y, (int)pt2.X, (int)pt2.Y, Scalar.White, 3);
                 }
-
-                var e = new Mat();
-                Cv2.Resize(scene, e, new Size(1920, 1080));
                     
-                Cv2.ImWrite(outPath, e);
-                Cv2.WaitKey();
+                Cv2.ImWrite(outPath, scene);
             }
             else
             {

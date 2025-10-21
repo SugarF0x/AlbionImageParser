@@ -12,7 +12,6 @@ public sealed class Test1
     {
         var outputPath = Path.GetFullPath("../../../../.output");
         
-        
         var assetsPath = Path.Combine(Directory.GetCurrentDirectory(), "Assets");
         var iconPath = Path.GetFullPath(Path.Combine(assetsPath, @"icon.png"));
         var imagesPath = Path.GetFullPath(Path.Combine(assetsPath, @"samples"));
