@@ -46,9 +46,9 @@ public static partial class RegionDetection
 
         if (maxVal < .9) throw new InvalidImage("Could not match template image - portal frame missing or obstructed");
         return new MatchedSampleRegions(
-            new Rect(350, 40, 660 - 350, 77 - 40),
-            new Rect(maxLoc.X - 208, maxLoc.Y - 35, 208 + 35, 35 - 8),
-            new Rect(maxLoc.X + 3, maxLoc.Y + 24, 83 - 3, 20)
+            new Rect(350, 40, 310, 37),
+            new Rect(maxLoc.X - 208, maxLoc.Y - 35, 243, 27),
+            new Rect(maxLoc.X + 3, maxLoc.Y + 24, 80, 20)
         );
     }
 
