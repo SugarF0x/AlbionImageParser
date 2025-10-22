@@ -79,7 +79,7 @@ public static partial class RegionDetection
         Cv2.CvtColor(invertedSample, graySample, ColorConversionCodes.BGR2GRAY);
         
         using var mask = new Mat();
-        Cv2.Threshold(graySample, mask, 155, 255, ThresholdTypes.Binary);
+        Cv2.Threshold(graySample, mask, 150, 255, ThresholdTypes.Binary);
         
         using var maskColor = mask.Clone();
         graySample.SetTo(new Scalar(255, 255, 255), maskColor);
@@ -90,7 +90,6 @@ public static partial class RegionDetection
 
         using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(graySample);
         
-        // // debug
         // using var resized = new Mat();
         // Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
         // Cv2.ImShow("E", resized);
@@ -100,13 +99,16 @@ public static partial class RegionDetection
         foreach (var r in TextSegmenter.FindTextSegments(trimmed))
         {
             using var e = CropMat(trimmed, r);
-            parsedSegments.Add(OcrRead(e, "1234567890"));
+            using var resized = new Mat();
+            Cv2.Resize(e, resized, new Size(e.Width * 4, e.Height * 4));
+            using var padded = new Mat();
+            Cv2.CopyMakeBorder(resized, padded, 0, 0, 1, 1, BorderTypes.Constant, Scalar.White);
+            parsedSegments.Add(OcrRead(padded, "1234567890"));
         }
 
         var result = $"{parsedSegments[0].PadLeft(2,'0')}:{parsedSegments[1].PadLeft(2,'0')}";
         result = isTimerUnderAnHour ? $"00:{result}" : $"{result}:00";
         
-        // // debug
         // using var resized = new Mat();
         // Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
         // Cv2.ImShow(result, resized);
@@ -115,7 +117,7 @@ public static partial class RegionDetection
         return result;
     } 
     
-    private static Mat CropMat(Mat source, Rect rect) => new (source, rect);
+    private static Mat CropMat(Mat source, Rect rect) => source[rect].Clone();
     
     private static bool IsTextRed(Mat image, double redRatioThreshold = 0.1)
     {
