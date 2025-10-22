@@ -99,12 +99,10 @@ public static partial class RegionDetection
         var result = $"{parsedSegments[0].PadLeft(2,'0')}:{parsedSegments[1].PadLeft(2,'0')}";
         result = isTimerUnderAnHour ? $"00:{result}" : $"{result}:00";
         
-        using var resized = new Mat();
-        Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
-        
+        // using var resized = new Mat();
+        // Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
         // Cv2.ImShow(result, resized);
         // Cv2.WaitKey();
-        // Cv2.DestroyWindow(result);
 
         return result;
     } 
@@ -147,7 +145,7 @@ public class InvalidImage(string message) : Exception(message);
 
 public static class ImageCleaner
 {
-    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.3, int threshold = 0)
+    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.4, int threshold = 0)
     {
         // 2. Threshold so dark pixels become white blobs in binary
         var binary = new Mat();
