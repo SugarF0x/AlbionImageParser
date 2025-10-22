@@ -79,7 +79,7 @@ public static partial class RegionDetection
         Cv2.CvtColor(invertedSample, graySample, ColorConversionCodes.BGR2GRAY);
         
         using var mask = new Mat();
-        Cv2.Threshold(graySample, mask, 175, 255, ThresholdTypes.Binary);
+        Cv2.Threshold(graySample, mask, 155, 255, ThresholdTypes.Binary);
         
         using var maskColor = mask.Clone();
         graySample.SetTo(new Scalar(255, 255, 255), maskColor);
@@ -88,8 +88,15 @@ public static partial class RegionDetection
         Cv2.BitwiseNot(maskColor, invertedMask);
         graySample.SetTo(new Scalar(0, 0, 0), invertedMask);
 
-        var parsedSegments = new List<string>();
         using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(graySample);
+        
+        // // debug
+        // using var resized = new Mat();
+        // Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
+        // Cv2.ImShow("E", resized);
+        // Cv2.WaitKey();
+        
+        var parsedSegments = new List<string>();
         foreach (var r in TextSegmenter.FindTextSegments(trimmed))
         {
             using var e = CropMat(trimmed, r);
@@ -99,6 +106,7 @@ public static partial class RegionDetection
         var result = $"{parsedSegments[0].PadLeft(2,'0')}:{parsedSegments[1].PadLeft(2,'0')}";
         result = isTimerUnderAnHour ? $"00:{result}" : $"{result}:00";
         
+        // // debug
         // using var resized = new Mat();
         // Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
         // Cv2.ImShow(result, resized);
