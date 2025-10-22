@@ -6,7 +6,7 @@ using Size = OpenCvSharp.Size;
 
 namespace AlbionImageParser;
 
-public static partial class RegionDetection
+public static class RegionDetection
 {
     public record struct SampleRegionData(string Source, string Target, string Timeout);
     public static SampleRegionData Parse(string sampleSrc, string templateSrc)
@@ -90,11 +90,6 @@ public static partial class RegionDetection
 
         using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(graySample);
         
-        // using var resized = new Mat();
-        // Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
-        // Cv2.ImShow("E", resized);
-        // Cv2.WaitKey();
-        
         var parsedSegments = new List<string>();
         foreach (var r in TextSegmenter.FindTextSegments(trimmed))
         {
@@ -108,11 +103,6 @@ public static partial class RegionDetection
 
         var result = $"{parsedSegments[0].PadLeft(2,'0')}:{parsedSegments[1].PadLeft(2,'0')}";
         result = isTimerUnderAnHour ? $"00:{result}" : $"{result}:00";
-        
-        // using var resized = new Mat();
-        // Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
-        // Cv2.ImShow(result, resized);
-        // Cv2.WaitKey();
 
         return result;
     } 
