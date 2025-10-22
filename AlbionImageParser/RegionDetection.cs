@@ -8,7 +8,7 @@ namespace AlbionImageParser;
 
 public static partial class RegionDetection
 {
-    public struct SampleRegionData(string source, string target, string timeout);
+    public record struct SampleRegionData(string Source, string Target, string Timeout);
     public static SampleRegionData Parse(string sampleSrc, string templateSrc)
     {
         var (sample, template) = PrepareSample(sampleSrc, templateSrc);
@@ -79,18 +79,20 @@ public static partial class RegionDetection
         Cv2.CvtColor(invertedSample, graySample, ColorConversionCodes.BGR2GRAY);
         
         using var mask = new Mat();
-        Cv2.Threshold(graySample, mask, 150, 255, ThresholdTypes.Binary);
-        using var maskColor = mask.Clone();
+        Cv2.Threshold(graySample, mask, 175, 255, ThresholdTypes.Binary);
         
+        using var maskColor = mask.Clone();
         graySample.SetTo(new Scalar(255, 255, 255), maskColor);
+
+        using var invertedMask = new Mat();
+        Cv2.BitwiseNot(maskColor, invertedMask);
+        graySample.SetTo(new Scalar(0, 0, 0), invertedMask);
 
         var parsedSegments = new List<string>();
         using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(graySample);
         foreach (var r in TextSegmenter.FindTextSegments(trimmed))
         {
-            Console.WriteLine(r);
             using var e = CropMat(trimmed, r);
-            
             parsedSegments.Add(OcrRead(e, "1234567890"));
         }
 
@@ -100,9 +102,9 @@ public static partial class RegionDetection
         using var resized = new Mat();
         Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
         
-        Cv2.ImShow(result, resized);
-        Cv2.WaitKey();
-        Cv2.DestroyWindow(result);
+        // Cv2.ImShow(result, resized);
+        // Cv2.WaitKey();
+        // Cv2.DestroyWindow(result);
 
         return result;
     } 
@@ -137,7 +139,6 @@ public static partial class RegionDetection
         double totalPixels = image.Rows * image.Cols;
         var ratio = redPixels / totalPixels;
 
-        // Console.WriteLine($"Red ratio: {ratio}");
         return ratio > redRatioThreshold;
     }
 }
@@ -146,18 +147,11 @@ public class InvalidImage(string message) : Exception(message);
 
 public static class ImageCleaner
 {
-    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.3, int threshold = 200)
+    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.3, int threshold = 0)
     {
-        // 1. Convert to grayscale
-        var gray = new Mat();
-        if (src.Channels() > 1)
-            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
-        else
-            gray = src.Clone();
-
         // 2. Threshold so dark pixels become white blobs in binary
         var binary = new Mat();
-        Cv2.Threshold(gray, binary, threshold, 255, ThresholdTypes.BinaryInv);
+        Cv2.Threshold(src, binary, threshold, 255, ThresholdTypes.BinaryInv);
 
         // 3. Connected components
         var labels = new Mat();
@@ -197,7 +191,6 @@ public static class ImageCleaner
         src.CopyTo(result, mask);
 
         // Cleanup
-        gray.Dispose();
         binary.Dispose();
         labels.Dispose();
         stats.Dispose();
