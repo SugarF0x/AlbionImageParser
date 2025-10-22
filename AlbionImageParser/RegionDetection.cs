@@ -20,8 +20,6 @@ public static partial class RegionDetection
             using (target)
             using (timeout)
             {
-                if (IsTextRed(timeout)) throw new InvalidImage("Portal timeout is under 1 hour");
-                
                 return new SampleRegionData(
                     ExtractText(source),
                     ExtractText(target),
@@ -54,14 +52,15 @@ public static partial class RegionDetection
         return (
             CropMat(sample, new Rect(350, 40, 310, 37)),
             CropMat(sample, new Rect(maxLoc.X - 208, maxLoc.Y - 35, 243, 27)),
-            CropMat(sample, new Rect(maxLoc.X + 3, maxLoc.Y + 24, 80, 20))
+            CropMat(sample, new Rect(maxLoc.X + 3, maxLoc.Y + 24, 65, 20))
         );
     }
 
-    private static (string text, float confidence) OcrRead(Mat sample)
+    private static (string text, float confidence) OcrRead(Mat sample, string whitelist = "")
     {
         var tessDataPath = Path.Combine(Directory.GetCurrentDirectory(), "Assets", "tessData");
         using var engine = new TesseractEngine(tessDataPath, "eng", EngineMode.Default);
+        if (whitelist.Length > 0) engine.SetVariable("tessedit_char_whitelist", whitelist);
         
         using var pix = Pix.LoadFromMemory(sample.ToBytes());
         using var page = engine.Process(pix, PageSegMode.SingleLine);
@@ -71,27 +70,48 @@ public static partial class RegionDetection
     private static string ExtractText(Mat sample)
     {
         var (text, confidence) = OcrRead(sample);
-        Console.WriteLine($"[{text}] Confidence: {confidence}");
+        // Console.WriteLine($"[{text}] Confidence: {confidence}");
         return text;
     }
 
     private static string ExtractTimeout(Mat sample)
     {
-        var (text, confidence) = OcrRead(sample);
-        var matches = TimeoutSplitRegex().Matches(text);
+        var isTimerUnderAnHour = IsTextRed(sample);
+        
+        using var invertedSample = new Mat();
+        Cv2.BitwiseNot(sample, invertedSample);
 
-        var result = "";
-        foreach (Match match in matches)
+        using var graySample = new Mat();
+        Cv2.CvtColor(invertedSample, graySample, ColorConversionCodes.BGR2GRAY);
+        
+        using var mask = new Mat();
+        Cv2.Threshold(graySample, mask, 150, 255, ThresholdTypes.Binary);
+        using var maskColor = mask.Clone();
+        
+        graySample.SetTo(new Scalar(255, 255, 255), maskColor);
+
+        var parsedSegments = new List<(string text, float confidence)>();
+        using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(graySample);
+        foreach (var r in TextSegmenter.FindTextSegments(trimmed))
         {
-            var item = match.Value;
-            var number = int.Parse(DigitGroupRegex().Match(item).Value);
-            var unit = UnitRegex().Match(item).Value[0];
+            Console.WriteLine(r);
+            using var e = CropMat(trimmed, r);
             
-            result += $"{number}:{unit} ";
+            parsedSegments.Add(OcrRead(e, "1234567890"));
         }
 
-        Console.WriteLine($"[{result.TrimEnd()}] Confidence: {confidence}");
-        return result.TrimEnd();
+        var result = $"{parsedSegments[0].text.PadLeft(2,'0')}:{parsedSegments[1].text.PadLeft(2,'0')}";
+        result = isTimerUnderAnHour ? $"00:{result}" : $"{result}:00";
+        
+        using var resized = new Mat();
+        Cv2.Resize(trimmed, resized, new Size(graySample.Width * 4, graySample.Height * 4));
+        
+        Cv2.ImShow(result, resized);
+        Cv2.WaitKey();
+        Cv2.DestroyWindow(result);
+
+        // Console.WriteLine($"[{result.TrimEnd()}] Confidence: {confidence}");
+        return result;
     } 
     
     private static Mat CropMat(Mat source, Rect rect) => new (source, rect);
@@ -124,7 +144,7 @@ public static partial class RegionDetection
         double totalPixels = image.Rows * image.Cols;
         var ratio = redPixels / totalPixels;
 
-        Console.WriteLine($"Red ratio: {ratio}");
+        // Console.WriteLine($"Red ratio: {ratio}");
         return ratio > redRatioThreshold;
     }
     
@@ -137,3 +157,152 @@ public static partial class RegionDetection
 }
 
 public class InvalidImage(string message) : Exception(message);
+
+public static class ImageCleaner
+{
+    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.3, int threshold = 200)
+    {
+        // 1. Convert to grayscale
+        var gray = new Mat();
+        if (src.Channels() > 1)
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+        else
+            gray = src.Clone();
+
+        // 2. Threshold so dark pixels become white blobs in binary
+        var binary = new Mat();
+        Cv2.Threshold(gray, binary, threshold, 255, ThresholdTypes.BinaryInv);
+
+        // 3. Connected components
+        var labels = new Mat();
+        var stats = new Mat();
+        var centroids = new Mat();
+        var nLabels = Cv2.ConnectedComponentsWithStats(
+            binary, labels, stats, centroids,
+            PixelConnectivity.Connectivity8, MatType.CV_32S
+        );
+
+        // 4. Find largest component area
+        var maxArea = 0;
+        for (var i = 1; i < nLabels; i++)
+        {
+            var area = stats.Get<int>(i, (int)ConnectedComponentsTypes.Area);
+            if (area > maxArea)
+                maxArea = area;
+        }
+
+        var minArea = (int)(maxArea * areaRatioThreshold);
+
+        // 5. Build mask with large components only
+        Mat mask = Mat.Zeros(binary.Size(), MatType.CV_8UC1);
+        var temp = new Mat();
+
+        for (var i = 1; i < nLabels; i++)
+        {
+            var area = stats.Get<int>(i, (int)ConnectedComponentsTypes.Area);
+            if (area < minArea) continue;
+            // Mask this component
+            Cv2.Compare(labels, i, temp, CmpType.EQ);
+            Cv2.BitwiseOr(mask, temp, mask);
+        }
+
+        // 6. Copy large dark components onto white background
+        Mat result = Mat.Ones(src.Size(), src.Type()) * 255; // fill all white
+        src.CopyTo(result, mask);
+
+        // Cleanup
+        gray.Dispose();
+        binary.Dispose();
+        labels.Dispose();
+        stats.Dispose();
+        centroids.Dispose();
+        mask.Dispose();
+        temp.Dispose();
+
+        return result;
+    }
+}
+
+public static class TextSegmenter
+{
+    public static List<Rect> FindTextSegments(Mat src, int gapThreshold = 2)
+    {
+        // 1. Grayscale + binary
+        var gray = new Mat();
+        if (src.Channels() > 1)
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+        else
+            gray = src.Clone();
+
+        var binary = new Mat();
+        Cv2.Threshold(gray, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+
+        // 2. Compute vertical projection (sum of black pixels per column)
+        var projection = new int[binary.Cols];
+        for (var x = 0; x < binary.Cols; x++)
+        {
+            var colSum = 0;
+            for (var y = 0; y < binary.Rows; y++)
+            {
+                if (binary.At<byte>(y, x) == 0) colSum++; // black pixel
+            }
+            projection[x] = colSum;
+        }
+
+        // 3. Find gaps
+        var segments = new List<Rect>();
+        var start = -1;
+        for (var x = 0; x < projection.Length; x++)
+        {
+            switch (projection[x])
+            {
+                case > 0 when start < 0:
+                    start = x; // start of a blob
+                    break;
+                case <= 0 when start >= 0:
+                {
+                    var width = x - start;
+                    if (width > gapThreshold) // ignore tiny noise columns
+                    {
+                        segments.Add(new Rect(start, 0, width, binary.Rows));
+                    }
+                    start = -1;
+                    break;
+                }
+            }
+        }
+        // handle last segment
+        if (start >= 0)
+        {
+            segments.Add(new Rect(start, 0, binary.Cols - start, binary.Rows));
+        }
+
+        gray.Dispose();
+        binary.Dispose();
+        return GetDigitRects(segments);
+    }
+
+    private static List<Rect> GetDigitRects(List<Rect> segments)
+    {
+        var result = new List<Rect>();
+
+        switch (segments.Count)
+        {
+            case < 4:
+                throw new InvalidImage($"Could not parse portal timer - insufficient segments: {segments.Count} < 4");
+            case 4:
+                result.Add(segments[0]);
+                result.Add(MergeRects(segments[2], segments[3]));
+                break;
+            default:
+                result.Add(MergeRects(segments[0], segments[1]));
+                result.Add(MergeRects(segments[3], segments[4]));
+                break;
+        }
+
+        return result;
+    }
+
+    private static Rect MergeRects(Rect a, Rect b) => Rect.FromLTRB(int.Min(a.Left, b.Left), int.Min(a.Top, b.Top), int.Max(a.Right, b.Right), int.Max(a.Bottom, b.Bottom));
+}
+

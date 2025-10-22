@@ -11,12 +11,18 @@ public sealed class Test1
         var imagesPath = Path.GetFullPath(Path.Combine(assetsPath, @"samples"));
         var images = Directory.GetFiles(imagesPath);
         
-        RegionDetection.Parse(images[13], iconPath);
-        RegionDetection.Parse(images[14], iconPath);
+        // RegionDetection.Parse(images[0], iconPath);
         
-        // foreach (var image in images)
-        // {
-        //     RegionDetection.Parse(image, iconPath);
-        // }
+        foreach (var image in images)
+        {
+            try
+            {
+                RegionDetection.Parse(image, iconPath);
+            }
+            catch (InvalidImage e)
+            {
+                
+            }
+        }
     }
 }
