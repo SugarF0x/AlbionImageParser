@@ -56,7 +56,7 @@ public static partial class RegionDetection
         );
     }
 
-    private static (string text, float confidence) OcrRead(Mat sample, string whitelist = "")
+    private static string OcrRead(Mat sample, string whitelist = "")
     {
         var tessDataPath = Path.Combine(Directory.GetCurrentDirectory(), "Assets", "tessData");
         using var engine = new TesseractEngine(tessDataPath, "eng", EngineMode.Default);
@@ -64,16 +64,10 @@ public static partial class RegionDetection
         
         using var pix = Pix.LoadFromMemory(sample.ToBytes());
         using var page = engine.Process(pix, PageSegMode.SingleLine);
-        return (page.GetText().Trim(), page.GetMeanConfidence());
+        return page.GetText().Trim();
     }
 
-    private static string ExtractText(Mat sample)
-    {
-        var (text, confidence) = OcrRead(sample);
-        // Console.WriteLine($"[{text}] Confidence: {confidence}");
-        return text;
-    }
-
+    private static string ExtractText(Mat sample) => OcrRead(sample);
     private static string ExtractTimeout(Mat sample)
     {
         var isTimerUnderAnHour = IsTextRed(sample);
@@ -90,7 +84,7 @@ public static partial class RegionDetection
         
         graySample.SetTo(new Scalar(255, 255, 255), maskColor);
 
-        var parsedSegments = new List<(string text, float confidence)>();
+        var parsedSegments = new List<string>();
         using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(graySample);
         foreach (var r in TextSegmenter.FindTextSegments(trimmed))
         {
@@ -100,7 +94,7 @@ public static partial class RegionDetection
             parsedSegments.Add(OcrRead(e, "1234567890"));
         }
 
-        var result = $"{parsedSegments[0].text.PadLeft(2,'0')}:{parsedSegments[1].text.PadLeft(2,'0')}";
+        var result = $"{parsedSegments[0].PadLeft(2,'0')}:{parsedSegments[1].PadLeft(2,'0')}";
         result = isTimerUnderAnHour ? $"00:{result}" : $"{result}:00";
         
         using var resized = new Mat();
@@ -110,7 +104,6 @@ public static partial class RegionDetection
         Cv2.WaitKey();
         Cv2.DestroyWindow(result);
 
-        // Console.WriteLine($"[{result.TrimEnd()}] Confidence: {confidence}");
         return result;
     } 
     
@@ -147,13 +140,6 @@ public static partial class RegionDetection
         // Console.WriteLine($"Red ratio: {ratio}");
         return ratio > redRatioThreshold;
     }
-    
-    [GeneratedRegex(@"(\d{1,2}\D+)")]
-    private static partial Regex TimeoutSplitRegex();
-    [GeneratedRegex(@"\d+")]
-    private static partial Regex DigitGroupRegex();
-    [GeneratedRegex(@"\D")]
-    private static partial Regex UnitRegex();
 }
 
 public class InvalidImage(string message) : Exception(message);
