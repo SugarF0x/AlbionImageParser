@@ -94,17 +94,22 @@ public static class RegionDetection
             using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
             Cv2.Dilate(mask, mask, kernel, iterations: 1);            
         }
+        else
+        {
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(2, 2));
+            Cv2.Erode(mask, mask, kernel, iterations: 1);    
+        }
 
         using var binary = new Mat();
         Cv2.BitwiseNot(mask, binary);
 
-        using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(binary);
+        using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(binary, .27);
         
         // Cv2.ImShow("trimmed", trimmed);
         // Cv2.WaitKey();
         
         var parsedSegments = new List<string>();
-        foreach (var r in TextSegmenter.FindTextSegments(trimmed, 12))
+        foreach (var r in TextSegmenter.FindTextSegments(trimmed, 8))
         {
             using var e = CropMat(trimmed, r);
             using var padded = new Mat();
