@@ -88,7 +88,13 @@ public static class RegionDetection
         using var invBinary = new Mat();
         Cv2.Threshold(graySample, invBinary, isTimerUnderAnHour ? 170 : 150, 255, ThresholdTypes.BinaryInv);
 
-        using var mask = invBinary.Clone();
+        using var binary = new Mat();
+        Cv2.BitwiseNot(invBinary, binary);
+
+        using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(binary, .28);
+        
+        using var mask = new Mat();
+        Cv2.BitwiseNot(trimmed, mask);
         if (isTimerUnderAnHour)
         {
             using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
@@ -96,24 +102,22 @@ public static class RegionDetection
         }
         else
         {
-            using var erodeKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 3));
-            Cv2.Erode(mask, mask, erodeKernel, iterations: 1);    
-            using var dilateKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 1));
-            Cv2.Dilate(mask, mask, dilateKernel, iterations: 1);    
+            using var verticalKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(1, 2));
+            Cv2.Erode(mask, mask, verticalKernel, iterations: 1);  
+            using var horizonalKernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(2, 1));
+            Cv2.Erode(mask, mask, horizonalKernel, iterations: 2);  
         }
 
-        using var binary = new Mat();
-        Cv2.BitwiseNot(mask, binary);
-
-        using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(binary, .28);
+        using var invertedMask = new Mat();
+        Cv2.BitwiseNot(mask, invertedMask);
         
-        // Cv2.ImShow("trimmed", trimmed);
+        // Cv2.ImShow("invertedMask", invertedMask);
         // Cv2.WaitKey();
         
         var parsedSegments = new List<string>();
-        foreach (var r in TextSegmenter.FindTextSegments(trimmed, 0))
+        foreach (var r in TextSegmenter.FindTextSegments(invertedMask, 0))
         {
-            using var e = CropMat(trimmed, r);
+            using var e = CropMat(invertedMask, r);
             using var padded = new Mat();
             Cv2.CopyMakeBorder(e, padded, 0, 0, 10, 10, BorderTypes.Constant, Scalar.White);
             
