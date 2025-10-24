@@ -1,5 +1,4 @@
-﻿using System.Text.RegularExpressions;
-using OpenCvSharp;
+﻿using OpenCvSharp;
 using Tesseract;
 using Rect = OpenCvSharp.Rect;
 using Size = OpenCvSharp.Size;
@@ -48,12 +47,14 @@ public static class RegionDetection
         Cv2.MatchTemplate(sample, template, result, TemplateMatchModes.CCoeffNormed);
         Cv2.MinMaxLoc(result, out _, out var maxVal, out _, out var maxLoc);
 
-        if (maxVal < .9) throw new InvalidImage("Could not match template image - portal frame missing or obstructed");
-        return (
-            CropMat(sample, new Rect(350, 40, 310, 37)),
-            CropMat(sample, new Rect(maxLoc.X - 208, maxLoc.Y - 35, 243, 27)),
-            CropMat(sample, new Rect(maxLoc.X + 3, maxLoc.Y + 24, 65, 20))
+        if (maxVal < .8) throw new InvalidImage("Could not match template image - portal frame missing or obstructed");
+        var (source, target, timeout) = (
+            CropMat(sample, new Rect(476, 28, 220, 35)),
+            CropMat(sample, new Rect(maxLoc.X - 138, maxLoc.Y - 27, 150, 20)),
+            CropMat(sample, new Rect(maxLoc.X, maxLoc.Y + 18, 50, 18))
         );
+
+        return (source, target, timeout);
     }
 
     private static string OcrRead(Mat sample, string whitelist = "")
