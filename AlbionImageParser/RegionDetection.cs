@@ -99,6 +99,10 @@ public static class RegionDetection
             Cv2.Resize(e, resized, new Size(e.Width * 4, e.Height * 4));
             using var padded = new Mat();
             Cv2.CopyMakeBorder(resized, padded, 0, 0, 1, 1, BorderTypes.Constant, Scalar.White);
+            
+            // Cv2.ImShow("padded", padded);
+            // Cv2.WaitKey();
+            
             parsedSegments.Add(OcrRead(padded, "1234567890"));
         }
 
@@ -146,7 +150,7 @@ public class InvalidImage(string message) : Exception(message);
 
 public static class ImageCleaner
 {
-    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.4, int threshold = 0)
+    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.3, int threshold = 0)
     {
         // 2. Threshold so dark pixels become white blobs in binary
         var binary = new Mat();
