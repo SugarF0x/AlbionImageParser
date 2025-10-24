@@ -51,7 +51,7 @@ public static class RegionDetection
         var (source, target, timeout) = (
             CropMat(sample, new Rect(476, 28, 220, 35)),
             CropMat(sample, new Rect(maxLoc.X - 138, maxLoc.Y - 27, 150, 20)),
-            CropMat(sample, new Rect(maxLoc.X, maxLoc.Y + 18, 50, 18))
+            CropMat(sample, new Rect(maxLoc.X, maxLoc.Y + 18, 65, 18))
         );
 
         return (source, target, timeout);
@@ -73,32 +73,42 @@ public static class RegionDetection
     {
         var isTimerUnderAnHour = IsTextRed(sample);
         
+        // Cv2.ImShow("sample", sample);
+        // Cv2.WaitKey();
+        
+        using var resized = new Mat();
+        Cv2.Resize(sample, resized, new Size(sample.Width * 4, sample.Height * 4));
+        
         using var invertedSample = new Mat();
-        Cv2.BitwiseNot(sample, invertedSample);
+        Cv2.BitwiseNot(resized, invertedSample);
 
         using var graySample = new Mat();
         Cv2.CvtColor(invertedSample, graySample, ColorConversionCodes.BGR2GRAY);
         
-        using var mask = new Mat();
-        Cv2.Threshold(graySample, mask, 150, 255, ThresholdTypes.Binary);
+        using var invBinary = new Mat();
+        Cv2.Threshold(graySample, invBinary, isTimerUnderAnHour ? 170 : 150, 255, ThresholdTypes.BinaryInv);
+
+        using var mask = invBinary.Clone();
+        if (isTimerUnderAnHour)
+        {
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(5, 5));
+            Cv2.Dilate(mask, mask, kernel, iterations: 1);            
+        }
+
+        using var binary = new Mat();
+        Cv2.BitwiseNot(mask, binary);
+
+        using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(binary);
         
-        using var maskColor = mask.Clone();
-        graySample.SetTo(new Scalar(255, 255, 255), maskColor);
-
-        using var invertedMask = new Mat();
-        Cv2.BitwiseNot(maskColor, invertedMask);
-        graySample.SetTo(new Scalar(0, 0, 0), invertedMask);
-
-        using var trimmed = ImageCleaner.RemoveSmallDarkObjectsByArea(graySample);
+        // Cv2.ImShow("trimmed", trimmed);
+        // Cv2.WaitKey();
         
         var parsedSegments = new List<string>();
-        foreach (var r in TextSegmenter.FindTextSegments(trimmed))
+        foreach (var r in TextSegmenter.FindTextSegments(trimmed, 12))
         {
             using var e = CropMat(trimmed, r);
-            using var resized = new Mat();
-            Cv2.Resize(e, resized, new Size(e.Width * 4, e.Height * 4));
             using var padded = new Mat();
-            Cv2.CopyMakeBorder(resized, padded, 0, 0, 1, 1, BorderTypes.Constant, Scalar.White);
+            Cv2.CopyMakeBorder(e, padded, 0, 0, 10, 10, BorderTypes.Constant, Scalar.White);
             
             // Cv2.ImShow("padded", padded);
             // Cv2.WaitKey();
@@ -150,18 +160,17 @@ public class InvalidImage(string message) : Exception(message);
 
 public static class ImageCleaner
 {
-    public static Mat RemoveSmallDarkObjectsByArea(Mat src, double areaRatioThreshold = 0.3, int threshold = 0)
+    public static Mat RemoveSmallDarkObjectsByArea(Mat binary, double areaRatioThreshold = 0.3)
     {
-        // 2. Threshold so dark pixels become white blobs in binary
-        var binary = new Mat();
-        Cv2.Threshold(src, binary, threshold, 255, ThresholdTypes.BinaryInv);
-
+        using var invertedBinary = new Mat();
+        Cv2.BitwiseNot(binary, invertedBinary);
+        
         // 3. Connected components
         var labels = new Mat();
         var stats = new Mat();
         var centroids = new Mat();
         var nLabels = Cv2.ConnectedComponentsWithStats(
-            binary, labels, stats, centroids,
+            invertedBinary, labels, stats, centroids,
             PixelConnectivity.Connectivity8, MatType.CV_32S
         );
 
@@ -190,11 +199,10 @@ public static class ImageCleaner
         }
 
         // 6. Copy large dark components onto white background
-        Mat result = Mat.Ones(src.Size(), src.Type()) * 255; // fill all white
-        src.CopyTo(result, mask);
+        Mat result = Mat.Ones(binary.Size(), binary.Type()) * 255; // fill all white
+        binary.CopyTo(result, mask);
 
         // Cleanup
-        binary.Dispose();
         labels.Dispose();
         stats.Dispose();
         centroids.Dispose();
@@ -219,6 +227,9 @@ public static class TextSegmenter
         var binary = new Mat();
         Cv2.Threshold(gray, binary, 0, 255, ThresholdTypes.Binary | ThresholdTypes.Otsu);
 
+        // Cv2.ImShow("binary", binary);
+        // Cv2.WaitKey();
+        
         // 2. Compute vertical projection (sum of black pixels per column)
         var projection = new int[binary.Cols];
         for (var x = 0; x < binary.Cols; x++)
@@ -270,9 +281,9 @@ public static class TextSegmenter
 
         switch (segments.Count)
         {
-            case < 4:
-                throw new InvalidImage($"Could not parse portal timer - insufficient segments: {segments.Count} < 4");
-            case 4:
+            case < 5:
+                throw new InvalidImage($"Could not parse portal timer - insufficient segments: {segments.Count} < 5");
+            case 5:
                 result.Add(segments[0]);
                 result.Add(MergeRects(segments[2], segments[3]));
                 break;
